@@ -1,10 +1,10 @@
 # Mémoire de contexte — généré automatiquement par The Forge
 # Ce fichier est un miroir lisible de la mémoire du Fetcher.
-# Dernière mise à jour : 2026-11-17T20:42:46.188267+00:00
+# Dernière mise à jour : 2026-11-22T02:00:29.774370+00:00
 
-MEMOIRE PERSISTANTE DU PROJET « Fork-Clone » :
+MEMOIRE PERSISTANTE DU PROJET « Fork-Clone-NewServ » :
 - Ce bloc est fourni par le Fetcher de contexte de la Forge. Il resulte des captures automatiques faites a l'ouverture du projet et a chaque information importante. Fie-toi a lui au lieu de re-scanner.
-- Git : branche claude-ai, dernier commit 8a85e66 feat(tickets): board kanban chantiers avec déplacement drag & drop.
+- Git : branche claude-ai, dernier commit acb9815 fix(tickets): fond du board lisible en thème clair et sombre.
 - Arborescence (extrait) :
   .emergent/
   .emergent/cron/
@@ -67,43 +67,22 @@ MEMOIRE PERSISTANTE DU PROJET « Fork-Clone » :
   backend/server.py
   backend/test_rollback.txt
 - Faits memorises (les plus importants d'abord) :
-  [regle] Accès aux fichiers de configuration sensibles/secrets interdit via bash.
-  [regle] - **Ne pas** mélanger ce chantier avec le correctif du bug `timeout of 60000ms exceeded` (sujet distinct).
-  [regle] - **Précaution** : conserver la mémoïsation (`React.memo` l. 548 de `ChatMessage`) — ne pas régresser la perf de streaming (règle connue : fenêtre de chat lente).
-  [regle] - **Socket Docker** : ne jamais le monter dans une preview, sous aucun prétexte (outil, debug, script de projet).
-  [regle] 2. Backoff obligatoire entre deux démarrages du même projet (ex. 30 s).
-  [regle] 2. Workspace en bind mount → push GitHub toujours possible après arrêt.
-  [regle] bon je sais pas ce à quoi tu joue mais la preview ne fonctionne pas !
-  [regle] On continue toujours avec RAPPORT_PREVIEWS_DOCKER.md, après avoir fait D1 et D2 applique D3 désormais.
-  [regle] 3. **Ne pas** ajouter `quentin` au groupe `docker` (équivalent root total).
-  [regle] ab981f7 feat(sse): fin de flux explicite — événement terminal unique `finished` + fermeture propre (Brique B) test(backend): couvre l'événement terminal unique de _SSEQueue (Brique B) docs: consigne l'étape 4 (fin de flux explicite) dans le rapport d'intégration forge-core
-  [regle] - **Risque** : migration de données — fallback obligatoire (étape 7).
-  [regle] 90:- **Risque** : migration de données — fallback obligatoire (étape 7).
-  [regle] écarté et **pourquoi**, pour ne pas réouvrir dix fois le même débat.
-  [regle] RÈGLE DE PERSISTANCE OBLIGATOIRE : le fichier AUDIT_SECURITE.md à la racine du projet est la base de référence exclusive de tout audit.
-  [regle] en même temps je n'ai jamais rien demander de la sorte pour RAPPORT_PREVIEWS_DOCKER.md la dernière version en date sur mon GitHub où tout jusqu'à maintenant est à consigner est la version commit 1fb9980 Repartir de celle-là, la completer en conséquence sans reécrire celui-ci de bout en bout !
-  [regle] OK l image ne tourne pas en root
-  [regle] OK le wrapper ne mentionne pas docker.sock == D2 : règle sudoers ==
-  [regle] **Application** : un `update_one` gardé par statut garantit qu'un tour finit toujours `done`/`error`, même si le client a disparu → fin des tours « bloqués en cours » fantômes.
-  [regle] Dès que tu dois inspecter, lire un fichier ou exécuter une commande bash : 1.
-  [regle] Consigne directe : 1.
-  [regle] Première chose il faut impérativement que les graphiques sois Implémentif (pour affichage correct sur mobile tablette tactile...) après par contre peu on approfondir la vitesse de chargement qui est encore lent je trouve sur ordi en wifi ?
-  [regle] La seule plage qui a diminué c'est la plage présentant le quota d'utilisation sous 5h qui est à mon sens normal puisque les 5h ont été dépassés mais celle d'à côté sur la fenêtre de quota sur la semaine au moment c'est toujours la même valeur alors à moins que j'ai activé le modèle qui ne consomme plus dessus pour le moment et à titre exceptionnel je suis assez étonné.
-  [regle] texte compacte pour ne pas saturer la fenetre de contexte).
-  [regle] 181: # OpenAI (proxies locaux, Freebuff, …). PROXY_BASE_URL est obligatoire,
-  [regle] et l'écrit), pour ne pas dupliquer l'information.
-  [regle] c'est juste qu'il faut editer la base json du combo c'est tout...
-  [regle] écriture de code (consigne « pas d'écriture » respectée).
-  [regle] dit moi et si il faut des corrections après avoir fait tout le reste des phase A et B
-  [regle] 1302: // Défère hors du handler clavier pour ne pas bloquer le thread (Violation keydown).
-  [regle] Bon le test 5 passe mais bon encore et toujours des violations...
-  [regle] c'est pour ça que j'ai marquer "enregistrer sur GitHub c'est bien mais pour le faire faudrait t'il encore avoir tout pour le faire" en gros si tu ne me donne pas le bon message de commit je ne peux pas le faire.
-  [regle] t'as toujours pas capter que tu tourne en prod...
-  [regle] a toi de faire ce qu'il faut pour que ça fonctionne maintenant.
-  [regle] toujours le violation "[Violation] 'submit' handler took 225ms" à l'envoi du message (ctrl+return et clic send)
-  [regle] bon bah exceptionnellement je vais me déconnecter et reconnecter (en espérant que ça fonctionne toujours...
-  [regle] ok corrige Chat.jsx et fait ce qu'il faut.
-  [regle] après ne pas oublier la config du server qui n'est pas non plus un cheval de course serte mais qui suffit pour mon usage...
-  [regle] ne crois pas non plus que c'est un serveur avec gros processeur (ne pas oublier que c'est un processeur de dedibox gamme "Start" avec DD Sata c'est pas du VPS...
-  [regle] Bonne nouvelle les 2 premiers tests sont toujours OK ✅ Le test 3 passe lui aussi OK ✅ après le correctif Je vois la suite des test après la réponse au moins le test 4
-  [regle] si il faut que tu modifie des choses et que ça sous entend modifier d'autre étapes sous étapes tu le feras pour arriver à du fonctionnel (c'est le principe aussi de la forge, corriger tout ce qui est à corriger pour que ça fonctionne et pas juste un fichier ou commit précisément...
+  [regle] d'ailleurs je vais de suite le faire TOUT SEUL comme il faut !
+  [regle] Il faut que tu comprenne de nouveau dans ce projet que tu est une forge de vibecoding et que tes agents travail dans une sandbox/workspace, donc je sais très bien ce que je fait merci
+  [regle] effectivement il est non vide logique c'est pour repartir depuis se commit sur les nouveauté donc logique qu'il n'est pas vide et c'ezst logique vue que c'est aussi une migration de l'ancien serveur vers le nouveau au final donc logique qu'il n'est pas vide et c'esrt ce qu'il faut !
+  [architecture] --- BRANCHES
+  [architecture] -rw-r--r-- 1 quentin quentin 15452 Nov 22 02:45 DEPLOIEMENT.md
+  [architecture] DEPLOIEMENT.md
+  [chemin] cwd: /var/www/forge/workspace/Fork-Clone-NewServ
+  [variable] exit_code: 0
+  [variable] origin https://github.com/TinQuen22Fr/Fork-Clone.git (fetch)
+  [variable] origin https://github.com/TinQuen22Fr/Fork-Clone.git (push)
+  [chemin] warning: unable to access '/home/quentin/.config/git/ignore': Permission denied
+  [chemin] warning: unable to access '/home/quentin/.config/git/attributes': Permission denied
+  [variable] déjà cette nouvelle version ne sera plus sur branch claude-ai ni sur ce dépôt le nouveau dépôt sera : https://github.com/TinQuen22Fr/Fork-Clone-NewServ branch vibecoding-newserv et trés prochainement le systeme de détection de branch sera reprogrammer.
+  [variable] ## 2026-11-17 — tickets: fond panneau lisible selon thème
+  [variable] - **Intention** : Sheet + AlertDialog sur `var(--bg-surface)` (fond hardcodé #0a0a0f + `.text-white` forcé #111 en clair = noir sur noir).
+  [variable] # Ce fichier est un miroir lisible de la mémoire du Fetcher.
+  [chemin] /var/www/forge/workspace/Fork-Clone-NewServ
+  [variable] Untracked files:
+  [variable] Recupérer le code du dépôt https://github.com/TinQuen22Fr/Fork-Clone/tree/claude-ai avec un git pull en vue de corriger des choses pour un nouveau serveur et apporter des modification s future qui seront installer sur ce nouveau serveur.

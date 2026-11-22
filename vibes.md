@@ -174,3 +174,8 @@
 - **Intention** : Sheet + AlertDialog sur `var(--bg-surface)` (fond hardcodé #0a0a0f + `.text-white` forcé #111 en clair = noir sur noir).
 - **Friction** : rendu non vérifiable sans navigateur.
 - **Suite** : contrôle visuel prod clair/sombre après upgrade.sh.
+
+## 2026-11-22 — récupération dépôt claude-ai @ acb9815
+- **Intention** : cloner `Fork-Clone` branche `claude-ai` dans workspace vide, se poser sur `acb9815` comme base.
+- **Friction** : clone direct refusé (dossier non vide : `.forge-context`) ; `git checkout -b` refusé (fichier local non suivi) ; contourné par `git init` + `fetch` + `reset --hard` + `branch -m master claude-ai` + upstream.
+- **Suite** : `git pull` de contrôle fait (`Already up to date`), arbre propre — prêt pour corrections serveur.
