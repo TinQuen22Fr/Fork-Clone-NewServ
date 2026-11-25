@@ -34,11 +34,14 @@ set -euo pipefail
 # Chemins systeme indispensables (identiques pour toutes les installations).
 SYSTEM_RWPATHS=(/dev/shm /etc/nginx /run /var/log/nginx)
 # Chemins relatifs a l'installation.
-APP_RWPATHS=(workspace .playwright backend/static/screenshots)
+APP_RWPATHS=(.playwright backend/static/screenshots)
+# Workspace/sandboxes : hors de l'app, sous le home de l'utilisateur ubuntu.
+WORKSPACE_DIR="${WORKSPACE_DIR:-/home/ubuntu/vibe-coding/workspace}"
 
 required_list() {
   local app="$1" p
   for p in "${APP_RWPATHS[@]}"; do printf '%s\n' "$app/$p"; done
+  printf '%s\n' "$WORKSPACE_DIR"
   for p in "${SYSTEM_RWPATHS[@]}"; do printf '%s\n' "$p"; done
   for p in ${REQUIRED_EXTRA:-}; do printf '%s\n' "$p"; done
 }

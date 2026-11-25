@@ -1,11 +1,11 @@
 [Unit]
 Description=Claude Unchained Forge - backend FastAPI
-After=network.target mongodb.service
+After=network.target mongod.service
 
 [Service]
 Type=simple
-User=quentin
-Group=quentin
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/var/www/forge/backend
 
 # Environnement et binaires systeme
@@ -19,7 +19,10 @@ ExecStart=/var/www/forge/backend/venv/bin/uvicorn server:app --host 127.0.0.1 --
 
 # Isolation du systeme
 ProtectSystem=strict
-ProtectHome=yes
+# Le workspace vit dans /home/ubuntu/vibe-coding/workspace : ProtectHome doit
+# rester desactive, sinon systemd masque /home pour le service ET ses enfants
+# (le workspace deviendrait invisible/illisible -> previews et outils casses).
+ProtectHome=no
 PrivateTmp=yes
 
 # ---------------------------------------------------------------------------
@@ -34,7 +37,7 @@ PrivateTmp=yes
 # silencieusement -> aucun projet dans la map -> PREVIEW en 503.
 # Voir deploy/KNOWN_ISSUE_preview_map_readonly.md
 # ---------------------------------------------------------------------------
-ReadWritePaths=/var/www/forge/workspace /var/www/forge/.playwright /var/www/forge/backend/static/screenshots /dev/shm /etc/nginx /run /var/log/nginx
+ReadWritePaths=/home/ubuntu/vibe-coding/workspace /var/www/forge/.playwright /var/www/forge/backend/static/screenshots /dev/shm /etc/nginx /run /var/log/nginx
 
 # Chemins en lecture seule indispensables
 ReadOnlyPaths=/var/www/forge

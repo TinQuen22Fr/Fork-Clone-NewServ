@@ -18,10 +18,13 @@ FRONTEND_DIR="$APP_DIR/frontend"
 SERVICE_NAME="forge-backend"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
-SERVICE_USER="${SERVICE_USER:-quentin}"
+SERVICE_USER="${SERVICE_USER:-ubuntu}"
 LITELLM_VENV="${LITELLM_VENV:-/var/www/forge/litellm-venv}"
 LITELLM_SERVICE="${LITELLM_SERVICE:-litellm}"
 LITELLM_SERVICE_FILE="/etc/systemd/system/${LITELLM_SERVICE}.service"
+
+# Workspace/sandboxes hors de l'app (home de l'utilisateur ubuntu).
+WORKSPACE_DIR="${WORKSPACE_DIR:-/home/ubuntu/vibe-coding/workspace}"
 
 c_info()  { printf '\033[36m[i]\033[0m %s\n' "$1"; }
 c_ok()    { printf '\033[32m[OK]\033[0m %s\n' "$1"; }
@@ -36,6 +39,23 @@ command -v npm     >/dev/null || { c_error "npm introuvable."; exit 1; }
 command -v systemctl >/dev/null || { c_error "systemctl introuvable (ce script cible une machine avec systemd)."; exit 1; }
 
 c_info "Répertoire de l'application : $APP_DIR"
+
+# --- Source Git : ce dépôt cible exclusivement la branche vibecoding-newserv.
+EXPECTED_REMOTE="TinQuen22Fr/Fork-Clone-NewServ"
+EXPECTED_BRANCH="vibecoding-newserv"
+if command -v git >/dev/null && git -C "$APP_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    CUR_REMOTE="$(git -C "$APP_DIR" remote get-url origin 2>/dev/null || true)"
+    CUR_BRANCH="$(git -C "$APP_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    case "$CUR_REMOTE" in
+        *"$EXPECTED_REMOTE"*) c_ok "dépôt origin = $EXPECTED_REMOTE" ;;
+        *) c_warn "origin inattendu : ${CUR_REMOTE:-<aucun>} (attendu *$EXPECTED_REMOTE*)" ;;
+    esac
+    if [ "$CUR_BRANCH" = "$EXPECTED_BRANCH" ]; then
+        c_ok "branche = $EXPECTED_BRANCH"
+    else
+        c_warn "branche courante '$CUR_BRANCH' (attendu '$EXPECTED_BRANCH')"
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # 1. Backend — environnement virtuel + dépendances
@@ -115,7 +135,7 @@ fi
 # ecriture sous ProtectSystem=strict -> bouton PREVIEW en 503.
 # Voir deploy/KNOWN_ISSUE_preview_map_readonly.md
 if [ -f "$SERVICE_FILE" ]; then
-    sudo bash "$APP_DIR/deploy/ensure-rwpaths.sh" "$SERVICE_FILE" "$APP_DIR" \
+    sudo WORKSPACE_DIR="$WORKSPACE_DIR" bash "$APP_DIR/deploy/ensure-rwpaths.sh" "$SERVICE_FILE" "$APP_DIR" \
         && sudo systemctl daemon-reload
 fi
 
@@ -168,11 +188,11 @@ fi
 read -r -p "Redémarrer ${SERVICE_NAME} maintenant ? [Y/n] " reply
 if [[ ! "$reply" =~ ^[Nn]$ ]]; then
     # Chemins de ReadWritePaths : absents, systemd echoue en 226/NAMESPACE.
-    SERVICE_USER="${SERVICE_USER:-quentin}"
-    sudo mkdir -p "$APP_DIR/workspace" "$APP_DIR/.playwright" \
+    SERVICE_USER="${SERVICE_USER:-ubuntu}"
+    sudo mkdir -p "$WORKSPACE_DIR" "$APP_DIR/.playwright" \
                   "$APP_DIR/backend/static/screenshots"
     sudo chown -R "$SERVICE_USER":"$SERVICE_USER" \
-        "$APP_DIR/workspace" "$APP_DIR/.playwright" \
+        "$WORKSPACE_DIR" "$APP_DIR/.playwright" \
         "$APP_DIR/backend/static/screenshots" 2>/dev/null \
         || c_warn "chown impossible (utilisateur $SERVICE_USER inconnu ?)"
     c_ok "Chemins inscriptibles prêts (workspace, .playwright, screenshots)."
@@ -202,9 +222,10 @@ fi
 # 7. Rappel Nginx (jamais automatisé ici)
 # ---------------------------------------------------------------------------
 echo ""
-c_info "Nginx n'est PAS touché par ce script."
+c_info "Nginx n'est PAS touché par ce script (binaire /usr/sbin/nginx, unité nginx.service)."
+c_info "Les vhosts vivent dans /etc/nginx/conf.d/ (pas de sites-available/enabled)."
 c_info "Si la config a changé, comparez avant de l'appliquer :"
-c_info "  diff deploy/nginx-forge.conf /etc/nginx/sites-available/forge"
+c_info "  diff deploy/nginx-forge.conf /etc/nginx/conf.d/forge.conf"
 c_info "Puis, seulement si le diff est voulu :"
 c_info "  sudo nginx -t && sudo systemctl reload nginx"
 echo ""

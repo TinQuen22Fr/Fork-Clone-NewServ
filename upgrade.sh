@@ -21,7 +21,8 @@ VENV_DIR="${VENV_DIR:-$APP_DIR/backend/venv}"
 SERVICE="${SERVICE:-forge-backend}"
 LITELLM_VENV="${LITELLM_VENV:-/var/www/forge/litellm-venv}"
 LITELLM_SERVICE="${LITELLM_SERVICE:-litellm}"
-SERVICE_USER="${SERVICE_USER:-quentin}"
+SERVICE_USER="${SERVICE_USER:-ubuntu}"
+WORKSPACE_DIR="${WORKSPACE_DIR:-/home/ubuntu/vibe-coding/workspace}"
 BRANCH="${BRANCH:-}"
 DO_PULL=1
 DO_BACKEND=1
@@ -347,7 +348,7 @@ if [ "$DO_BACKEND" -eq 1 ] && [ -f deploy/forge-backend.service ]; then
   # /etc/nginx /run /var/log/nginx sont requis par la map des previews
   # (ProtectSystem=strict). Voir deploy/KNOWN_ISSUE_preview_map_readonly.md
   if [ -f "$UNIT" ]; then
-    bash deploy/ensure-rwpaths.sh "$UNIT" "$APP_DIR" && systemctl daemon-reload
+    WORKSPACE_DIR="$WORKSPACE_DIR" bash deploy/ensure-rwpaths.sh "$UNIT" "$APP_DIR" && systemctl daemon-reload
   fi
 fi
 
@@ -403,10 +404,10 @@ fi
 # ---------------------------------------------------------------------------
 # 7. Nginx : signale un ecart, sans rien imposer
 # ---------------------------------------------------------------------------
-if [ -f deploy/nginx-forge.conf ] && [ -f /etc/nginx/sites-available/forge ]; then
-  if ! cmp -s deploy/nginx-forge.conf /etc/nginx/sites-available/forge; then
+if [ -f deploy/nginx-forge.conf ] && [ -f /etc/nginx/conf.d/forge.conf ]; then
+  if ! cmp -s deploy/nginx-forge.conf /etc/nginx/conf.d/forge.conf; then
     c_warn "la config Nginx du depot differe de celle installee :"
-    echo "      diff deploy/nginx-forge.conf /etc/nginx/sites-available/forge"
+    echo "      diff deploy/nginx-forge.conf /etc/nginx/conf.d/forge.conf"
   fi
 fi
 
@@ -417,10 +418,10 @@ if [ "$DO_BACKEND" -eq 1 ]; then
   c_step "Chemins inscriptibles exiges par systemd (ReadWritePaths)"
   # Si un chemin de ReadWritePaths n'existe pas, systemd echoue avec
   # status=226/NAMESPACE des le restart.
-  mkdir -p "$APP_DIR/workspace" "$APP_DIR/.playwright" \
+  mkdir -p "$WORKSPACE_DIR" "$APP_DIR/.playwright" \
            "$APP_DIR/backend/static/screenshots"
   chown -R "$SERVICE_USER":"$SERVICE_USER" \
-    "$APP_DIR/workspace" "$APP_DIR/.playwright" \
+    "$WORKSPACE_DIR" "$APP_DIR/.playwright" \
     "$APP_DIR/backend/static/screenshots" 2>/dev/null \
     || c_warn "chown impossible (utilisateur $SERVICE_USER inconnu ?)"
   c_ok "workspace/, .playwright/, backend/static/screenshots/ prets"
