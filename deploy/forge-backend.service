@@ -11,7 +11,10 @@ WorkingDirectory=/var/www/forge/backend
 # Environnement et binaires systeme
 Environment="PATH=/var/www/forge/backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PLAYWRIGHT_BROWSERS_PATH=/var/www/forge/.playwright"
-EnvironmentFile=/var/www/forge/backend/.env
+# Config compartimentee : le .env vit dans /etc/forge (chmod 600), pas dans le
+# runtime. systemd injecte les variables ; server.py (load_dotenv) reste un
+# no-op inoffensif puisque les variables sont deja dans l'environnement.
+EnvironmentFile=/etc/forge/backend.env
 
 # UN SEUL worker : plusieurs workers = plusieurs gestionnaires de preview
 # concurrents (ports en double, start/stop qui ne trouvent pas leur process).

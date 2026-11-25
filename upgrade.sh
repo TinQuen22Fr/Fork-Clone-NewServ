@@ -3,38 +3,45 @@
 # Claude Unchained Forge — Copyright (C) 2026 Quentin Dumont
 # Logiciel libre sous GNU GPL v3 — voir LICENSE.
 #
-# upgrade.sh — mise a jour d'une installation existante.
-#   install.sh  = premiere installation (ou reinstallation complete)
-#   upgrade.sh  = correctifs, nouveautes, nouvelles dependances, nouveau .env
+# upgrade.sh — mise a jour d'une installation existante (modele compartimente).
+#   install.sh  = premiere installation        (SOURCE /opt -> RUNTIME /var/www/forge)
+#   upgrade.sh  = correctifs, nouveautes, deps  (idem, SANS git pull)
 #
-# Usage (depuis la racine du projet, en root ou via sudo) :
-#     sudo bash upgrade.sh                 # pull + deps + build + restart
-#     sudo bash upgrade.sh --no-pull       # ne touche pas a git (code deja a jour)
+# AUCUN `git pull` ici : tu mets a jour le clone toi-meme avant de lancer :
+#     cd /opt/forge-newserv && git pull --ff-only
+#     sudo bash /opt/forge-newserv/upgrade.sh
+#
+# Usage :
+#     sudo bash upgrade.sh                 # rsync + deps + build + restart
+#     sudo bash upgrade.sh --no-sync       # ne recopie pas le code (runtime deja a jour)
 #     sudo bash upgrade.sh --backend-only  # saute le build frontend
 #     sudo bash upgrade.sh --frontend-only # saute pip + service
-#     sudo bash upgrade.sh --branch main   # met a jour depuis une autre branche
 #
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+# Modele compartimente : SOURCE (clone git, pull MANUEL) -> RUNTIME (execution).
+SOURCE_DIR="${SOURCE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+RUNTIME_DIR="${RUNTIME_DIR:-/var/www/forge}"
+APP_DIR="$RUNTIME_DIR"
+ENV_DIR="${ENV_DIR:-/etc/forge}"
+ENV_FILE="${ENV_FILE:-$ENV_DIR/backend.env}"
+FRONTEND_ENV_FILE="${FRONTEND_ENV_FILE:-$ENV_DIR/frontend.env}"
 VENV_DIR="${VENV_DIR:-$APP_DIR/backend/venv}"
 SERVICE="${SERVICE:-forge-backend}"
 LITELLM_VENV="${LITELLM_VENV:-/var/www/forge/litellm-venv}"
 LITELLM_SERVICE="${LITELLM_SERVICE:-litellm}"
 SERVICE_USER="${SERVICE_USER:-ubuntu}"
 WORKSPACE_DIR="${WORKSPACE_DIR:-/home/ubuntu/vibe-coding/workspace}"
-BRANCH="${BRANCH:-}"
-DO_PULL=1
+DO_SYNC=1
 DO_BACKEND=1
 DO_FRONTEND=1
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --no-pull)       DO_PULL=0 ;;
+    --no-sync|--no-pull) DO_SYNC=0 ;;
     --backend-only)  DO_FRONTEND=0 ;;
     --frontend-only) DO_BACKEND=0 ;;
-    --branch)        BRANCH="${2:-}"; shift ;;
-    -h|--help)       sed -n '1,25p' "$0"; exit 0 ;;
+    -h|--help)       sed -n '1,22p' "$0"; exit 0 ;;
     *) echo "Option inconnue : $1"; exit 1 ;;
   esac
   shift
@@ -46,87 +53,67 @@ c_warn() { printf '\033[1;33m  /!\\\033[0m %s\n' "$*"; }
 die()    { printf '\033[1;31mERREUR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "a lancer en root : sudo bash upgrade.sh"
-[ -f "$APP_DIR/backend/server.py" ] || die "$APP_DIR ne ressemble pas a la Forge"
-cd "$APP_DIR"
-
-# ---------------------------------------------------------------------------
-# 0. Auto-relance apres pull : empreinte du script courant
-#    upgrade.sh est lu une seule fois par bash au lancement. Si le pull ci-dessous
-#    recupere une nouvelle version de CE fichier, bash continue pourtant d'executer
-#    l'ancien code deja charge en memoire. On capture donc l'empreinte AVANT le pull,
-#    on la recompare APRES, et on se re-execute avec le nouveau code si besoin.
-#    FORGE_UPGRADE_REEXEC empeche toute boucle infinie (une seule relance autorisee).
-# ---------------------------------------------------------------------------
-SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-SELF_HASH_BEFORE="$(sha256sum "$SELF_PATH" | cut -d' ' -f1)"
+[ -f "$SOURCE_DIR/backend/server.py" ] || die "$SOURCE_DIR ne ressemble pas au clone de la Forge"
+command -v rsync >/dev/null || die "rsync introuvable"
 
 # ---------------------------------------------------------------------------
 # 1. Sauvegarde du .env (le seul fichier irremplacable)
 # ---------------------------------------------------------------------------
 c_step "Sauvegarde de la configuration"
 STAMP="$(date +%F-%H%M%S)"
-if [ -f backend/.env ]; then
-  cp backend/.env "backend/.env.bak-$STAMP"
-  c_ok "backend/.env -> backend/.env.bak-$STAMP"
+if [ -f "$ENV_FILE" ]; then
+  cp "$ENV_FILE" "$ENV_FILE.bak-$STAMP"
+  c_ok "$ENV_FILE -> $ENV_FILE.bak-$STAMP"
 else
-  c_warn "backend/.env absent — lance install.sh d'abord ?"
+  c_warn "$ENV_FILE absent — lance install.sh d'abord ?"
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Recuperation du code
+# 2. Synchronisation du code  SOURCE (clone) -> RUNTIME (execution)
+#    Aucun `git pull` ici : tu mets a jour /opt/forge-newserv a la main.
 # ---------------------------------------------------------------------------
-if [ "$DO_PULL" -eq 1 ] && [ -d .git ]; then
-  c_step "Mise a jour du code"
-  CUR_BRANCH="$(git -c safe.directory=* rev-parse --abbrev-ref HEAD)"
-  TARGET="${BRANCH:-$CUR_BRANCH}"
-  if [ -n "$(git -c safe.directory=* status --porcelain --untracked-files=no)" ]; then
-    c_warn "modifications locales detectees, mises de cote (git stash)"
-    # Pas de -u : workspace/ n'est pas suivi par git dans l'installation et
-    # contient les projets des previews (dont un clone de ce depot). Un
-    # stash -u l'aspirerait entierement et laisserait l'arbre sans workspace.
-    git -c safe.directory=* stash push -m "upgrade-$STAMP" >/dev/null
-    STASHED=1
-  fi
-  git -c safe.directory=* fetch --prune origin
-  [ "$TARGET" = "$CUR_BRANCH" ] || git -c safe.directory=* checkout "$TARGET"
-  git -c safe.directory=* pull --ff-only origin "$TARGET"
-  c_ok "branche $TARGET @ $(git -c safe.directory=* rev-parse --short HEAD)"
-
-  # --- Auto-relance si upgrade.sh lui-meme a change pendant ce pull ---
-  SELF_HASH_AFTER="$(sha256sum "$SELF_PATH" | cut -d' ' -f1)"
-  if [ "$SELF_HASH_BEFORE" != "$SELF_HASH_AFTER" ] && [ "${FORGE_UPGRADE_REEXEC:-0}" != "1" ]; then
-    printf '\n\033[1;33m==> Nouvelle version de upgrade.sh detectee apres le pull\033[0m\n'
-    printf '\033[1;32m  ok\033[0m nouveau script recupere et sauvegarde sur le disque\n'
-    printf '\033[1;36m==>\033[0m Relance d'"'"'upgrade.sh avec le nouveau code...\n\n'
-    export FORGE_UPGRADE_REEXEC=1
-    # Le pull est deja fait : la relance repart --no-pull pour ne pas re-puller,
-    # constate que tout est up-to-date, et execute les nouveautes correctement.
-    exec bash "$SELF_PATH" --no-pull
-  fi
-  [ "${STASHED:-0}" -eq 1 ] && c_warn "recupere tes modifs avec : git stash pop"
+if [ "$DO_SYNC" -eq 1 ]; then
+  c_step "Synchronisation  $SOURCE_DIR -> $RUNTIME_DIR"
+  mkdir -p "$RUNTIME_DIR"
+  rsync -a --delete \
+    --exclude='.git/' \
+    --exclude='backend/venv/' \
+    --exclude='litellm-venv/' \
+    --exclude='frontend/node_modules/' \
+    --exclude='frontend/build/' \
+    --exclude='.playwright/' \
+    --exclude='backend/static/screenshots/' \
+    --exclude='backend/.env' \
+    --exclude='*.bak-*' \
+    --exclude='.upgrade-*.sha' \
+    --exclude='.forge-preview-db-clone' \
+    "$SOURCE_DIR"/ "$RUNTIME_DIR"/
+  c_ok "code synchronise (sans .git, venv, node_modules, build, .env)"
 else
-  c_step "Code : pull ignore"
+  c_step "Synchronisation ignoree (--no-sync)"
 fi
+[ -f "$APP_DIR/backend/server.py" ] || die "$APP_DIR incomplet — relance sans --no-sync"
+cd "$APP_DIR"
 
 # ---------------------------------------------------------------------------
 # 3. Nouvelles cles .env : ajoutees a la fin, sans ecraser l'existant
 # ---------------------------------------------------------------------------
-if [ -f backend/.env ] && [ -f backend/env.example ]; then
+if [ -f "$ENV_FILE" ] && [ -f "$APP_DIR/backend/env.example" ]; then
   c_step "Nouvelles variables de configuration"
   MISSING="$(
     LC_ALL=C comm -23 --nocheck-order \
       <(grep -oE '^[A-Z0-9_]+=' "$APP_DIR/backend/env.example" | LC_ALL=C sort -u) \
-      <(grep -oE '^[A-Z0-9_]+=' "$APP_DIR/backend/.env"        | LC_ALL=C sort -u)
+      <(grep -oE '^[A-Z0-9_]+=' "$ENV_FILE"                    | LC_ALL=C sort -u)
   )"
   if [ -n "$MISSING" ]; then
     {
       printf '\n# --- Ajoute par upgrade.sh le %s ---\n' "$STAMP"
       for key in $MISSING; do
-        grep -m1 "^$key" backend/env.example
+        grep -m1 "^$key" "$APP_DIR/backend/env.example"
       done
-    } >> backend/.env
+    } >> "$ENV_FILE"
     echo "$MISSING" | sed 's/=$/ ajoutee/' | sed 's/^/  + /'
-    c_warn "verifie les valeurs : nano backend/.env"
+    c_warn "verifie les valeurs : nano $ENV_FILE"
   else
     c_ok "aucune nouvelle variable"
   fi
@@ -251,13 +238,13 @@ PYCHROME
     # BROWSERS_PATH a jour (sans jamais dupliquer la cle) pour que le service
     # redemarre sur le bon dossier. C'est ce qui garantit que Playwright
     # SURVIT a chaque upgrade.sh, meme apres un pull du code sandbox.
-    if [ -n "$CHROMIUM_CACHE" ] && [ -d "$CHROMIUM_CACHE" ] && [ -f "$APP_DIR/backend/.env" ]; then
-      CURRENT_ENV_PATH="$(grep -oE '^PLAYWRIGHT_BROWSERS_PATH=.*' "$APP_DIR/backend/.env" | head -n1 | cut -d= -f2-)"
+    if [ -n "$CHROMIUM_CACHE" ] && [ -d "$CHROMIUM_CACHE" ] && [ -f "$ENV_FILE" ]; then
+      CURRENT_ENV_PATH="$(grep -oE '^PLAYWRIGHT_BROWSERS_PATH=.*' "$ENV_FILE" | head -n1 | cut -d= -f2-)"
       if [ "$CURRENT_ENV_PATH" != "$CHROMIUM_CACHE" ]; then
-        if grep -q '^PLAYWRIGHT_BROWSERS_PATH=' "$APP_DIR/backend/.env"; then
-          sed -i "s|^PLAYWRIGHT_BROWSERS_PATH=.*|PLAYWRIGHT_BROWSERS_PATH=$CHROMIUM_CACHE|" "$APP_DIR/backend/.env"
+        if grep -q '^PLAYWRIGHT_BROWSERS_PATH=' "$ENV_FILE"; then
+          sed -i "s|^PLAYWRIGHT_BROWSERS_PATH=.*|PLAYWRIGHT_BROWSERS_PATH=$CHROMIUM_CACHE|" "$ENV_FILE"
         else
-          printf '\nPLAYWRIGHT_BROWSERS_PATH=%s\n' "$CHROMIUM_CACHE" >> "$APP_DIR/backend/.env"
+          printf '\nPLAYWRIGHT_BROWSERS_PATH=%s\n' "$CHROMIUM_CACHE" >> "$ENV_FILE"
         fi
         c_ok "PLAYWRIGHT_BROWSERS_PATH recale sur $CHROMIUM_CACHE (le service retrouvera Chromium)"
       fi
@@ -309,6 +296,10 @@ fi
 if [ "$DO_FRONTEND" -eq 1 ] && [ -d frontend ]; then
   c_step "Build frontend"
   cd frontend
+  if [ -f "$FRONTEND_ENV_FILE" ]; then
+    install -m 0644 "$FRONTEND_ENV_FILE" .env
+    c_ok "frontend/.env depuis $FRONTEND_ENV_FILE"
+  fi
   PKG_HASH_FILE="$APP_DIR/.upgrade-package.sha"
   PKG_HASH="$(sha256sum package.json | cut -d' ' -f1)"
   if [ "$(cat "$PKG_HASH_FILE" 2>/dev/null)" = "$PKG_HASH" ] && [ -d node_modules ]; then
@@ -435,7 +426,7 @@ if [ "$DO_BACKEND" -eq 1 ]; then
   }
   c_ok "service actif"
 
-  PORT="$(grep -m1 -oE '^PORT=[0-9]+' "$APP_DIR/backend/.env" 2>/dev/null | cut -d= -f2 || true)"
+  PORT="$(grep -m1 -oE '^PORT=[0-9]+' "$ENV_FILE" 2>/dev/null | cut -d= -f2 || true)"
   URL="http://127.0.0.1:${PORT:-8001}/api/health"
   CODE=000
   for _ in $(seq 1 10); do
@@ -521,7 +512,7 @@ fi
 #    on ecrase forge_preview avec un dump frais de la base de prod, pour que
 #    les previews refletent l'etat courant.
 #
-#    - Lit MONGO_URL + DB_NAME dans backend/.env (source).
+#    - Lit MONGO_URL + DB_NAME dans /etc/forge/backend.env (source).
 #    - mongodump --archive | mongorestore --drop --nsFrom=<src>.* --nsTo=forge_preview.*
 #    - En cas d'echec : log, on ne bloque PAS la fin de l'upgrade.
 # ---------------------------------------------------------------------------
@@ -529,9 +520,9 @@ c_step "Clonage BDD preview (forge_preview)"
 if command -v mongodump >/dev/null 2>&1 && command -v mongorestore >/dev/null 2>&1; then
   SRC_MONGO_URL=""
   SRC_DB_NAME=""
-  if [ -f backend/.env ]; then
-    SRC_MONGO_URL="$(grep -m1 -E '^MONGO_URL=' backend/.env | cut -d= -f2- || true)"
-    SRC_DB_NAME="$(grep -m1 -E '^DB_NAME=' backend/.env | cut -d= -f2- || true)"
+  if [ -f "$ENV_FILE" ]; then
+    SRC_MONGO_URL="$(grep -m1 -E '^MONGO_URL=' "$ENV_FILE" | cut -d= -f2- || true)"
+    SRC_DB_NAME="$(grep -m1 -E '^DB_NAME=' "$ENV_FILE" | cut -d= -f2- || true)"
   fi
   SRC_MONGO_URL="${SRC_MONGO_URL:-mongodb://localhost:27017}"
   SRC_DB_NAME="${SRC_DB_NAME:-forge}"
@@ -589,7 +580,8 @@ fi
 c_step "Mise a jour terminee"
 cat <<EOF
   Journal en direct   : journalctl -u $SERVICE -f
-  Nouvelles variables : nano $APP_DIR/backend/.env
-  Retour arriere      : git checkout <sha> && sudo bash upgrade.sh --no-pull
-  Sauvegarde .env     : backend/.env.bak-$STAMP
+  Nouvelles variables : nano $ENV_FILE
+  Mise a jour du clone: cd $SOURCE_DIR && git pull --ff-only   (manuel)
+  Retour arriere      : cd $SOURCE_DIR && git checkout <sha> && sudo bash $SOURCE_DIR/upgrade.sh
+  Sauvegarde .env     : $ENV_FILE.bak-$STAMP
 EOF
